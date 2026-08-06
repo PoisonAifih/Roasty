@@ -1,0 +1,126 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS beans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    origin TEXT NOT NULL,
+    variety TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    price_per_kg NUMERIC(12, 2) NOT NULL,
+    stock_kg NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    harvest_estimate_kg NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    humidity NUMERIC(5, 2) NOT NULL DEFAULT 60,
+    quality_score NUMERIC(5, 2) NOT NULL DEFAULT 70,
+    sell_price_per_kg NUMERIC(12, 2) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sales (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bean_id UUID NOT NULL REFERENCES beans(id),
+    qty_kg NUMERIC(12, 2) NOT NULL,
+    sold_at DATE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trend_signals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    origin TEXT NOT NULL,
+    note TEXT NOT NULL,
+    strength INT NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS coffee_shops (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    payment_status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    shop_id UUID NOT NULL REFERENCES coffee_shops(id),
+    qty_kg NUMERIC(12, 2) NOT NULL,
+    ordered_at DATE NOT NULL
+);
+
+UPDATE beans SET channel = 'farmer' WHERE lower(channel) IN ('petani');
+UPDATE beans SET channel = 'middleman' WHERE lower(channel) IN ('tengkulak', 'agen', 'middle man');
+UPDATE coffee_shops SET payment_status = 'paid' WHERE lower(payment_status) IN ('lunas');
+UPDATE coffee_shops SET payment_status = 'credit' WHERE lower(payment_status) IN ('kredit');
+UPDATE coffee_shops SET payment_status = 'overdue' WHERE lower(payment_status) IN ('telat', 'terlambat');
+
+DO $$
+BEGIN
+  IF (SELECT COUNT(*) FROM beans) = 0 THEN
+    INSERT INTO beans (id, origin, variety, channel, price_per_kg, stock_kg, harvest_estimate_kg, humidity, quality_score, sell_price_per_kg) VALUES
+      ('11111111-1111-1111-1111-111111111101', 'Gayo, Aceh', 'Arabica', 'farmer', 85000, 45, 1200, 72, 88, 145000),
+      ('11111111-1111-1111-1111-111111111102', 'Toraja, Sulsel', 'Arabica', 'farmer', 92000, 28, 800, 68, 90, 155000),
+      ('11111111-1111-1111-1111-111111111103', 'Kintamani, Bali', 'Arabica', 'middleman', 78000, 60, 1500, 65, 82, 130000),
+      ('11111111-1111-1111-1111-111111111104', 'Flores Bajawa', 'Arabica', 'farmer', 88000, 18, 600, 70, 86, 148000),
+      ('11111111-1111-1111-1111-111111111105', 'Mandailing, Sumut', 'Arabica', 'middleman', 75000, 80, 2000, 74, 78, 125000),
+      ('11111111-1111-1111-1111-111111111106', 'Java Preanger', 'Arabica', 'farmer', 95000, 22, 500, 66, 91, 160000),
+      ('11111111-1111-1111-1111-111111111107', 'Lampung', 'Robusta', 'middleman', 42000, 120, 3500, 78, 70, 72000),
+      ('11111111-1111-1111-1111-111111111108', 'Temanggung', 'Robusta', 'farmer', 48000, 55, 1800, 75, 74, 80000),
+      ('11111111-1111-1111-1111-111111111109', 'Sidikalang', 'Arabica', 'middleman', 70000, 35, 900, 71, 80, 118000),
+      ('11111111-1111-1111-1111-111111111110', 'Wamena, Papua', 'Arabica', 'farmer', 110000, 12, 300, 80, 93, 185000);
+
+    INSERT INTO sales (bean_id, qty_kg, sold_at) VALUES
+      ('11111111-1111-1111-1111-111111111101', 8, CURRENT_DATE - 7),
+      ('11111111-1111-1111-1111-111111111101', 10, CURRENT_DATE - 14),
+      ('11111111-1111-1111-1111-111111111101', 9, CURRENT_DATE - 21),
+      ('11111111-1111-1111-1111-111111111101', 11, CURRENT_DATE - 28),
+      ('11111111-1111-1111-1111-111111111102', 6, CURRENT_DATE - 5),
+      ('11111111-1111-1111-1111-111111111102', 7, CURRENT_DATE - 12),
+      ('11111111-1111-1111-1111-111111111102', 5, CURRENT_DATE - 19),
+      ('11111111-1111-1111-1111-111111111102', 8, CURRENT_DATE - 26),
+      ('11111111-1111-1111-1111-111111111103', 12, CURRENT_DATE - 6),
+      ('11111111-1111-1111-1111-111111111103', 10, CURRENT_DATE - 13),
+      ('11111111-1111-1111-1111-111111111103', 11, CURRENT_DATE - 20),
+      ('11111111-1111-1111-1111-111111111104', 5, CURRENT_DATE - 4),
+      ('11111111-1111-1111-1111-111111111104', 4, CURRENT_DATE - 11),
+      ('11111111-1111-1111-1111-111111111104', 6, CURRENT_DATE - 18),
+      ('11111111-1111-1111-1111-111111111105', 15, CURRENT_DATE - 8),
+      ('11111111-1111-1111-1111-111111111105', 14, CURRENT_DATE - 15),
+      ('11111111-1111-1111-1111-111111111105', 16, CURRENT_DATE - 22),
+      ('11111111-1111-1111-1111-111111111106', 4, CURRENT_DATE - 3),
+      ('11111111-1111-1111-1111-111111111106', 5, CURRENT_DATE - 10),
+      ('11111111-1111-1111-1111-111111111106', 3, CURRENT_DATE - 17),
+      ('11111111-1111-1111-1111-111111111107', 25, CURRENT_DATE - 7),
+      ('11111111-1111-1111-1111-111111111107', 22, CURRENT_DATE - 14),
+      ('11111111-1111-1111-1111-111111111107', 28, CURRENT_DATE - 21),
+      ('11111111-1111-1111-1111-111111111108', 10, CURRENT_DATE - 9),
+      ('11111111-1111-1111-1111-111111111108', 9, CURRENT_DATE - 16),
+      ('11111111-1111-1111-1111-111111111109', 7, CURRENT_DATE - 5),
+      ('11111111-1111-1111-1111-111111111109', 6, CURRENT_DATE - 12),
+      ('11111111-1111-1111-1111-111111111110', 2, CURRENT_DATE - 6),
+      ('11111111-1111-1111-1111-111111111110', 3, CURRENT_DATE - 13),
+      ('11111111-1111-1111-1111-111111111110', 2, CURRENT_DATE - 20);
+
+    INSERT INTO trend_signals (origin, note, strength) VALUES
+      ('Gayo, Aceh', 'Single-origin Gayo demand rising at specialty cafes', 4),
+      ('Toraja, Sulsel', 'Toraja honey-process trend is rising', 3),
+      ('Wamena, Papua', 'Tight supply, spot prices rising', 5),
+      ('Lampung', 'High-volume robusta blend demand for espresso base', 2),
+      ('Flores Bajawa', 'Q2 articles highlight floral Flores notes', 3);
+
+    INSERT INTO coffee_shops (id, name, payment_status) VALUES
+      ('22222222-2222-2222-2222-222222222201', 'Local Memory Cafe', 'paid'),
+      ('22222222-2222-2222-2222-222222222202', 'Warung Brew House', 'credit'),
+      ('22222222-2222-2222-2222-222222222203', 'Cafe Semesta', 'overdue'),
+      ('22222222-2222-2222-2222-222222222204', 'Roast & Co Outlet', 'paid'),
+      ('22222222-2222-2222-2222-222222222205', 'Morning Dusk Cafe', 'credit');
+
+    INSERT INTO orders (shop_id, qty_kg, ordered_at) VALUES
+      ('22222222-2222-2222-2222-222222222201', 15, CURRENT_DATE - 42),
+      ('22222222-2222-2222-2222-222222222201', 14, CURRENT_DATE - 28),
+      ('22222222-2222-2222-2222-222222222201', 16, CURRENT_DATE - 14),
+      ('22222222-2222-2222-2222-222222222202', 10, CURRENT_DATE - 60),
+      ('22222222-2222-2222-2222-222222222202', 12, CURRENT_DATE - 40),
+      ('22222222-2222-2222-2222-222222222202', 11, CURRENT_DATE - 20),
+      ('22222222-2222-2222-2222-222222222203', 8, CURRENT_DATE - 50),
+      ('22222222-2222-2222-2222-222222222203', 9, CURRENT_DATE - 35),
+      ('22222222-2222-2222-2222-222222222203', 8, CURRENT_DATE - 5),
+      ('22222222-2222-2222-2222-222222222204', 20, CURRENT_DATE - 30),
+      ('22222222-2222-2222-2222-222222222204', 18, CURRENT_DATE - 15),
+      ('22222222-2222-2222-2222-222222222205', 6, CURRENT_DATE - 45),
+      ('22222222-2222-2222-2222-222222222205', 7, CURRENT_DATE - 25),
+      ('22222222-2222-2222-2222-222222222205', 6, CURRENT_DATE - 5);
+  END IF;
+END $$;

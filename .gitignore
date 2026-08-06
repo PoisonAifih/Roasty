@@ -1,0 +1,15 @@
+node_modules/
+frontend/dist/
+frontend/node_modules/
+ai/.venv/
+ai/models/roasty-ft/
+ai/models/checkpoints/
+__pycache__/
+*.pyc
+.env
+frontend/.env
+.DS_Store
+backend/tmp/
+*.exe
+.idea/
+.vscode/
