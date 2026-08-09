@@ -22,11 +22,11 @@ func NewCRMService(pool *pgxpool.Pool, ai *AIClient) *CRMService {
 
 func (s *CRMService) FollowUps(ctx context.Context) ([]models.CRMFollowUp, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT cs.id::text, cs.name, cs.payment_status,
+		SELECT cs.id::text, cs.name, cs.payment_status, COALESCE(cs.phone, ''),
 		       array_agg(o.ordered_at ORDER BY o.ordered_at) AS dates
 		FROM coffee_shops cs
 		JOIN orders o ON o.shop_id = cs.id
-		GROUP BY cs.id, cs.name, cs.payment_status
+		GROUP BY cs.id, cs.name, cs.payment_status, cs.phone
 		ORDER BY cs.name`)
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func (s *CRMService) FollowUps(ctx context.Context) ([]models.CRMFollowUp, error
 	for rows.Next() {
 		var f models.CRMFollowUp
 		var dates []time.Time
-		if err := rows.Scan(&f.ShopID, &f.ShopName, &f.PaymentStatus, &dates); err != nil {
+		if err := rows.Scan(&f.ShopID, &f.ShopName, &f.PaymentStatus, &f.Phone, &dates); err != nil {
 			return nil, err
 		}
 		f.AvgIntervalDays = avgInterval(dates)

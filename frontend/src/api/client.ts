@@ -52,6 +52,7 @@ export type CRMFollowUp = {
   shop_id: string
   shop_name: string
   payment_status: string
+  phone: string
   avg_interval_days: number
   days_since_order: number
   predicted_reorder_date: string
@@ -97,4 +98,19 @@ export const api = {
     ),
   inventory: () => request<InventorySuggestion[]>('/api/inventory/suggestions'),
   crm: () => request<CRMFollowUp[]>('/api/crm/follow-ups'),
+
+  recordSale: (body: { bean_id: string; qty_kg: number; sold_at?: string }) =>
+    request<{ status: string }>('/api/sales', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adjustStock: (beanId: string, stockKg: number) =>
+    request<{ status: string }>(`/api/beans/${encodeURIComponent(beanId)}/stock`, {
+      method: 'PATCH',
+      body: JSON.stringify({ stock_kg: stockKg }),
+    }),
+  markContacted: (shopId: string) =>
+    request<{ status: string }>(`/api/shops/${encodeURIComponent(shopId)}/contacted`, {
+      method: 'POST',
+    }),
 }

@@ -40,11 +40,22 @@ CREATE TABLE IF NOT EXISTS orders (
     ordered_at DATE NOT NULL
 );
 
+-- Columns added after the initial schema; idempotent so Migrate can re-run.
+ALTER TABLE coffee_shops ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE coffee_shops ADD COLUMN IF NOT EXISTS last_contacted_at DATE;
+
 UPDATE beans SET channel = 'farmer' WHERE lower(channel) IN ('petani');
 UPDATE beans SET channel = 'middleman' WHERE lower(channel) IN ('tengkulak', 'agen', 'middle man');
 UPDATE coffee_shops SET payment_status = 'paid' WHERE lower(payment_status) IN ('lunas');
 UPDATE coffee_shops SET payment_status = 'credit' WHERE lower(payment_status) IN ('kredit');
 UPDATE coffee_shops SET payment_status = 'overdue' WHERE lower(payment_status) IN ('telat', 'terlambat');
+
+-- Synthetic contact numbers so the WhatsApp follow-up link has a target.
+UPDATE coffee_shops SET phone = '628123456701' WHERE id = '22222222-2222-2222-2222-222222222201' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456702' WHERE id = '22222222-2222-2222-2222-222222222202' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456703' WHERE id = '22222222-2222-2222-2222-222222222203' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456704' WHERE id = '22222222-2222-2222-2222-222222222204' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456705' WHERE id = '22222222-2222-2222-2222-222222222205' AND phone IS NULL;
 
 DO $$
 BEGIN

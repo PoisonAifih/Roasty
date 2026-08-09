@@ -26,6 +26,11 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/scout/shops", a.scoutShops)
 	mux.HandleFunc("GET /api/inventory/suggestions", a.inventory)
 	mux.HandleFunc("GET /api/crm/follow-ups", a.followUps)
+
+	// Mutating routes: these let the agent act on its recommendations.
+	mux.HandleFunc("POST /api/sales", a.recordSale)
+	mux.HandleFunc("PATCH /api/beans/{id}/stock", a.adjustStock)
+	mux.HandleFunc("POST /api/shops/{id}/contacted", a.markContacted)
 }
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +87,40 @@ func (a *API) followUps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (a *API) recordSale(w http.ResponseWriter, r *http.Request) {
+	var in services.RecordSaleInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if err := a.inv.RecordSale(r.Context(), in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"status": "recorded"})
+}
+
+func (a *API) adjustStock(w http.ResponseWriter, r *http.Request) {
+	var in services.AdjustStockInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if err := a.inv.AdjustStock(r.Context(), r.PathValue("id"), in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func (a *API) markContacted(w http.ResponseWriter, r *http.Request) {
+	if err := a.crm.MarkContacted(r.Context(), r.PathValue("id")); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "contacted"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -58,6 +58,7 @@ type CRMFollowUp struct {
 	ShopID           string  `json:"shop_id"`
 	ShopName         string  `json:"shop_name"`
 	PaymentStatus    string  `json:"payment_status"`
+	Phone            string  `json:"phone"`
 	AvgIntervalDays  float64 `json:"avg_interval_days"`
 	DaysSinceOrder   float64 `json:"days_since_order"`
 	PredictedReorder string  `json:"predicted_reorder_date"`
