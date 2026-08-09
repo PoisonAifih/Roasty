@@ -36,8 +36,19 @@ func (a *API) Register(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /api/scout/basket", a.basket)
 
+	mux.HandleFunc("GET /api/briefing", a.briefing)
+
 	// Agent: SSE so the UI can render each tool call as it happens.
 	mux.HandleFunc("GET /api/agent/stream", a.agentStream)
+}
+
+func (a *API) briefing(w http.ResponseWriter, r *http.Request) {
+	b, err := a.agent.DailyBriefing(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, b)
 }
 
 func (a *API) basket(w http.ResponseWriter, r *http.Request) {

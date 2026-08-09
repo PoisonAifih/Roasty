@@ -40,7 +40,7 @@ func main() {
 	inv := services.NewInventoryService(pool, ai)
 	crm := services.NewCRMService(pool, ai)
 
-	agent := services.NewAgent(pool, ai, scout, inv)
+	agent := services.NewAgent(pool, ai, scout, inv, crm)
 
 	h := handlers.New(scout, inv, crm, agent, pool)
 	mux := http.NewServeMux()

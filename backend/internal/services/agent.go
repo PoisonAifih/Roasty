@@ -27,10 +27,11 @@ type Agent struct {
 	ai    *AIClient
 	scout *ScoutService
 	inv   *InventoryService
+	crm   *CRMService
 }
 
-func NewAgent(pool *pgxpool.Pool, ai *AIClient, scout *ScoutService, inv *InventoryService) *Agent {
-	return &Agent{pool: pool, ai: ai, scout: scout, inv: inv}
+func NewAgent(pool *pgxpool.Pool, ai *AIClient, scout *ScoutService, inv *InventoryService, crm *CRMService) *Agent {
+	return &Agent{pool: pool, ai: ai, scout: scout, inv: inv, crm: crm}
 }
 
 const agentSystemPrompt = `You are a sourcing advisor for an Indonesian coffee roastery.

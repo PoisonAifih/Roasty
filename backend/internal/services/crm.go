@@ -20,7 +20,19 @@ func NewCRMService(pool *pgxpool.Pool, ai *AIClient) *CRMService {
 	return &CRMService{pool: pool, ai: ai}
 }
 
+// FollowUps returns shop signals with an AI-written message per row.
 func (s *CRMService) FollowUps(ctx context.Context) ([]models.CRMFollowUp, error) {
+	out, err := s.snapshotFollowUps(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.fillCRMMessages(ctx, out)
+	return out, nil
+}
+
+// snapshotFollowUps computes the same signals without calling the AI, for
+// callers that only need the numbers.
+func (s *CRMService) snapshotFollowUps(ctx context.Context) ([]models.CRMFollowUp, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT cs.id::text, cs.name, cs.payment_status, COALESCE(cs.phone, ''),
 		       array_agg(o.ordered_at ORDER BY o.ordered_at) AS dates
@@ -50,12 +62,7 @@ func (s *CRMService) FollowUps(ctx context.Context) ([]models.CRMFollowUp, error
 		f.LatePayRisk = f.PaymentStatus == "overdue" || f.PaymentStatus == "credit"
 		out = append(out, f)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	s.fillCRMMessages(ctx, out)
-	return out, nil
+	return out, rows.Err()
 }
 
 // fillCRMMessages populates Message for every shop concurrently, capped at

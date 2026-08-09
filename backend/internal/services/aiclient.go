@@ -229,6 +229,8 @@ func systemPrompt(task string) string {
 		return "You are a coffee inventory advisor. Given stock signals, reply with one short restock recommendation in plain English." + english
 	case "CRM":
 		return "You are a coffee shop CRM advisor. Given order and payment signals, reply with one short follow-up message in plain English." + english
+	case "BRIEFING":
+		return "You are a coffee roastery operations advisor. Given today's ranked priorities, reply with one short paragraph telling the owner what to do first and why. Plain English, no markdown, no lists." + english
 	case "SHOP":
 		return "You are a coffee sourcing advisor. Given origin/variety and live shop search hits, reply with one short note comparing online vs offline buying options in plain English." + english
 	default:
