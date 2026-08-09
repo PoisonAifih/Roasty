@@ -24,7 +24,20 @@ func NewInventoryService(pool *pgxpool.Pool, ai *AIClient) *InventoryService {
 	return &InventoryService{pool: pool, ai: ai}
 }
 
+// Suggestions returns restock signals with an AI narrative per row.
 func (s *InventoryService) Suggestions(ctx context.Context) ([]models.InventorySuggestion, error) {
+	out, err := s.snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.fillRestockTexts(ctx, out)
+	return out, nil
+}
+
+// snapshot computes the same signals without calling the AI. The agent uses
+// this: it reasons over the numbers itself, so per-row prose would be wasted
+// tokens and latency.
+func (s *InventoryService) snapshot(ctx context.Context) ([]models.InventorySuggestion, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT b.id::text, b.origin, b.variety, b.stock_kg,
 		       COALESCE(SUM(s.qty_kg), 0) AS total_sold,
@@ -58,8 +71,6 @@ func (s *InventoryService) Suggestions(ctx context.Context) ([]models.InventoryS
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
-	s.fillRestockTexts(ctx, out)
 
 	rank := map[string]int{"high": 0, "med": 1, "low": 2}
 	for i := 0; i < len(out); i++ {

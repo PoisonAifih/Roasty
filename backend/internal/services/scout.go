@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -79,6 +80,26 @@ func (s *ScoutService) Recommend(ctx context.Context, in RecommendInput) ([]mode
 			}
 		}
 	}
+	return out, nil
+}
+
+// scoreOnly ranks beans without generating the per-bean AI narrative, which
+// is what the agent wants: it reasons over the raw numbers itself.
+func (s *ScoutService) scoreOnly(ctx context.Context, in RecommendInput) ([]models.ScoutRecommendation, error) {
+	beans, err := s.ListBeans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	in.Channel = normalizeChannel(in.Channel)
+
+	var out []models.ScoutRecommendation
+	for _, b := range beans {
+		if in.Channel != "" && b.Channel != in.Channel {
+			continue
+		}
+		out = append(out, scoreBean(b, in.Budget, in.WeightKg))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].FitScore > out[j].FitScore })
 	return out, nil
 }
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,11 +13,12 @@ type API struct {
 	scout *services.ScoutService
 	inv   *services.InventoryService
 	crm   *services.CRMService
+	agent *services.Agent
 	pool  *pgxpool.Pool
 }
 
-func New(scout *services.ScoutService, inv *services.InventoryService, crm *services.CRMService, pool *pgxpool.Pool) *API {
-	return &API{scout: scout, inv: inv, crm: crm, pool: pool}
+func New(scout *services.ScoutService, inv *services.InventoryService, crm *services.CRMService, agent *services.Agent, pool *pgxpool.Pool) *API {
+	return &API{scout: scout, inv: inv, crm: crm, agent: agent, pool: pool}
 }
 
 func (a *API) Register(mux *http.ServeMux) {
@@ -31,6 +33,47 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sales", a.recordSale)
 	mux.HandleFunc("PATCH /api/beans/{id}/stock", a.adjustStock)
 	mux.HandleFunc("POST /api/shops/{id}/contacted", a.markContacted)
+
+	// Agent: SSE so the UI can render each tool call as it happens.
+	mux.HandleFunc("GET /api/agent/stream", a.agentStream)
+}
+
+// agentStream runs the agent and pushes every trace event to the browser as
+// server-sent events. EventSource only issues GET, so the goal arrives as a
+// query parameter.
+func (a *API) agentStream(w http.ResponseWriter, r *http.Request) {
+	goal := r.URL.Query().Get("goal")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming unsupported"})
+		return
+	}
+
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("Connection", "keep-alive")
+	h.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	// Run invokes emit synchronously, so writing here needs no extra locking.
+	send := func(ev services.TraceEvent) {
+		payload, err := json.Marshal(ev)
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(w, "data: %s\n\n", payload)
+		flusher.Flush()
+	}
+
+	if _, err := a.agent.Run(r.Context(), goal, send); err != nil {
+		send(services.TraceEvent{Type: "error", Message: err.Error()})
+	}
+
+	fmt.Fprint(w, "event: done\ndata: {}\n\n")
+	flusher.Flush()
 }
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
