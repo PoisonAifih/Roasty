@@ -81,6 +81,19 @@ export type BasketPlan = {
   budget_used_pct: number
 }
 
+export type BriefingItem = {
+  kind: 'payment' | 'restock' | 'reorder' | string
+  title: string
+  detail: string
+  impact_idr: number
+  severity: 'high' | 'med' | 'low' | string
+}
+
+export type Briefing = {
+  summary: string
+  items: BriefingItem[]
+}
+
 export type TraceEvent = {
   type: 'step' | 'tool_call' | 'tool_result' | 'final' | 'error'
   tool?: string
@@ -163,6 +176,7 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ stock_kg: stockKg }),
     }),
+  briefing: () => request<Briefing>('/api/briefing'),
   basket: (body: { budget: number; max_kg?: number; channel?: string }) =>
     request<BasketPlan[]>('/api/scout/basket', {
       method: 'POST',

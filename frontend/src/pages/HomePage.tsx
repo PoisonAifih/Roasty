@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, type Bean, type CRMFollowUp, type InventorySuggestion } from '@/api/client'
+import {
+  api,
+  type Bean,
+  type Briefing,
+  type CRMFollowUp,
+  type InventorySuggestion,
+} from '@/api/client'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,7 +35,10 @@ type Summary = {
   beans: Bean[]
   inventory: InventorySuggestion[]
   crm: CRMFollowUp[]
+  briefing: Briefing
 }
+
+const idr = (n: number) => `IDR ${Math.round(n).toLocaleString('en-US')}`
 
 export function HomePage() {
   const [loading, setLoading] = useState(true)
@@ -42,12 +51,13 @@ export function HomePage() {
       setLoading(true)
       setError('')
       try {
-        const [beans, inventory, crm] = await Promise.all([
+        const [beans, inventory, crm, briefing] = await Promise.all([
           api.beans(),
           api.inventory(),
           api.crm(),
+          api.briefing(),
         ])
-        if (!cancelled) setData({ beans, inventory, crm })
+        if (!cancelled) setData({ beans, inventory, crm, briefing })
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load summary')
       } finally {
@@ -98,6 +108,52 @@ export function HomePage() {
 
       {data && (
         <>
+          <Card className="rounded-none border-destructive shadow-none">
+            <CardHeader className="pb-2">
+              <CardTitle className="font-heading text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
+                Today's priorities
+              </CardTitle>
+              <Separator />
+            </CardHeader>
+            <CardContent>
+              <p className="m-0 mb-3 text-[1.02rem] leading-relaxed">{data.briefing.summary}</p>
+              {data.briefing.items.length > 0 && (
+                <ol className="m-0 flex list-none flex-col p-0">
+                  {data.briefing.items.map((it, i) => (
+                    <li
+                      key={`${it.kind}-${i}`}
+                      className="flex items-center gap-3 border-t border-border py-2.5"
+                    >
+                      <span className="font-heading w-5 shrink-0 text-sm text-muted-foreground">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <strong className="font-heading block font-semibold">{it.title}</strong>
+                        <small className="block text-sm text-muted-foreground">{it.detail}</small>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className="font-heading block text-sm font-semibold">
+                          {idr(it.impact_idr)}
+                        </span>
+                        <Badge
+                          variant={
+                            it.severity === 'high'
+                              ? 'destructive'
+                              : it.severity === 'med'
+                                ? 'secondary'
+                                : 'outline'
+                          }
+                        >
+                          {it.severity}
+                        </Badge>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="rounded-none py-0 shadow-none">
             <CardContent className="grid grid-cols-1 p-0 sm:grid-cols-2 lg:grid-cols-4">
               <Stat
