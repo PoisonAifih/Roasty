@@ -1,0 +1,16 @@
+# Normalize line endings to LF inside the repository.
+# This repo lives on a Windows drive (/mnt/e) accessed from WSL, so editors on
+# either side rewrite every file and produce diffs with no content change.
+* text=auto eol=lf
+
+# Binary — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Generated; keep out of review noise.
+frontend/package-lock.json linguist-generated
