@@ -61,7 +61,61 @@ export type CRMFollowUp = {
   message: string
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8014'
+export type BasketLine = {
+  bean_id: string
+  origin: string
+  variety: string
+  qty_kg: number
+  price_per_kg: number
+  cost: number
+  projected_profit: number
+}
+
+export type BasketPlan = {
+  strategy: string
+  rationale: string
+  lines: BasketLine[]
+  total_cost: number
+  total_kg: number
+  projected_profit: number
+  budget_used_pct: number
+}
+
+export type TraceEvent = {
+  type: 'step' | 'tool_call' | 'tool_result' | 'final' | 'error'
+  tool?: string
+  message: string
+  step?: number
+}
+
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8014'
+
+/** Opens the agent SSE stream. Returns a closer so callers can abort. */
+export function streamAgent(
+  goal: string,
+  onEvent: (ev: TraceEvent) => void,
+  onDone: () => void,
+): () => void {
+  const src = new EventSource(`${API_URL}/api/agent/stream?goal=${encodeURIComponent(goal)}`)
+
+  src.onmessage = (e) => {
+    try {
+      onEvent(JSON.parse(e.data) as TraceEvent)
+    } catch {
+      // A malformed frame should not kill the whole run.
+    }
+  }
+  src.addEventListener('done', () => {
+    src.close()
+    onDone()
+  })
+  src.onerror = () => {
+    src.close()
+    onDone()
+  }
+
+  return () => src.close()
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -108,6 +162,11 @@ export const api = {
     request<{ status: string }>(`/api/beans/${encodeURIComponent(beanId)}/stock`, {
       method: 'PATCH',
       body: JSON.stringify({ stock_kg: stockKg }),
+    }),
+  basket: (body: { budget: number; max_kg?: number; channel?: string }) =>
+    request<BasketPlan[]>('/api/scout/basket', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
   markContacted: (shopId: string) =>
     request<{ status: string }>(`/api/shops/${encodeURIComponent(shopId)}/contacted`, {

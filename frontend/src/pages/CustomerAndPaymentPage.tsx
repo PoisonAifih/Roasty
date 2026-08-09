@@ -7,11 +7,36 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
+// Indonesian roasteries run on WhatsApp, so the follow-up note is only useful
+// if it can actually be sent. Prefill the message and let the owner edit it.
+function waLink(c: CRMFollowUp) {
+  const greeting = `Halo ${c.shop_name}, selamat siang!`
+  const body =
+    c.payment_status === 'overdue'
+      ? 'Kami ingin menindaklanjuti pembayaran yang masih tertunda. Mohon infonya ya. Terima kasih!'
+      : `Biasanya pesanan berikutnya sekitar ${c.predicted_reorder_date}. Apakah mau kami siapkan stoknya?`
+  return `https://wa.me/${c.phone}?text=${encodeURIComponent(`${greeting} ${body}`)}`
+}
+
 export function CRMPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [items, setItems] = useState<CRMFollowUp[]>([])
   const [selected, setSelected] = useState<CRMFollowUp | null>(null)
+  const [marking, setMarking] = useState(false)
+
+  async function markDone(shopId: string) {
+    setMarking(true)
+    setError('')
+    try {
+      await api.markContacted(shopId)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark contacted')
+    } finally {
+      setMarking(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -176,6 +201,28 @@ export function CRMPage() {
                     Follow-up note
                   </h3>
                   <p className="m-0">{selected.message}</p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {selected.phone ? (
+                      <Button asChild className="rounded-none">
+                        <a href={waLink(selected)} target="_blank" rel="noreferrer">
+                          Send WhatsApp
+                        </a>
+                      </Button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        No phone number on file.
+                      </span>
+                    )}
+                    <Button
+                      variant="outline"
+                      className="rounded-none"
+                      disabled={marking}
+                      onClick={() => void markDone(selected.shop_id)}
+                    >
+                      {marking ? 'Saving…' : 'Mark contacted'}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

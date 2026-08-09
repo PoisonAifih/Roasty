@@ -34,8 +34,24 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/beans/{id}/stock", a.adjustStock)
 	mux.HandleFunc("POST /api/shops/{id}/contacted", a.markContacted)
 
+	mux.HandleFunc("POST /api/scout/basket", a.basket)
+
 	// Agent: SSE so the UI can render each tool call as it happens.
 	mux.HandleFunc("GET /api/agent/stream", a.agentStream)
+}
+
+func (a *API) basket(w http.ResponseWriter, r *http.Request) {
+	var in services.BasketInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	plans, err := a.scout.BuildBaskets(r.Context(), in)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, plans)
 }
 
 // agentStream runs the agent and pushes every trace event to the browser as

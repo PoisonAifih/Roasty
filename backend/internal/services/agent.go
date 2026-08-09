@@ -90,6 +90,15 @@ func agentTools() []ToolDef {
 			}, "origin"),
 		}},
 		{Type: "function", Function: FunctionDef{
+			Name:        "build_basket",
+			Description: "Allocate a budget across several beans at once and return three purchase plans (max_profit, lowest_risk, balanced) with kg, rupiah cost and projected profit per line. Use this whenever the user gives a budget - a roastery buys a mix, not a single origin.",
+			Parameters: obj(map[string]any{
+				"budget":  num,
+				"max_kg":  num,
+				"channel": map[string]any{"type": "string", "enum": []string{"farmer", "middleman", ""}},
+			}, "budget"),
+		}},
+		{Type: "function", Function: FunctionDef{
 			Name:        "market_price",
 			Description: "Search the live web for current market listings and suppliers for an origin. Use when you need prices outside the roastery's own records.",
 			Parameters: obj(map[string]any{
@@ -241,6 +250,17 @@ func (ag *Agent) execute(ctx context.Context, name, rawArgs string) (string, err
 		}
 		return fmt.Sprintf(`{"origin":%q,"days":%d,"total_kg":%.1f,"transactions":%d,"avg_kg_per_day":%.2f}`,
 			origin, days, total, orders, total/float64(days)), nil
+
+	case "build_basket":
+		plans, err := ag.scout.BuildBaskets(ctx, BasketInput{
+			Budget:  argNum("budget"),
+			MaxKg:   argNum("max_kg"),
+			Channel: argStr("channel"),
+		})
+		if err != nil {
+			return "", err
+		}
+		return toJSON(plans)
 
 	case "market_price":
 		shops, err := ag.scout.FindShops(ctx, argStr("origin"), argStr("variety"))

@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Sidebar } from '@/components/Sidebar'
+import { AgentPage } from '@/pages/AgentPage'
 import { CRMPage } from '@/pages/CustomerAndPaymentPage'
 import { HomePage } from '@/pages/HomePage'
 import { InventoryPage } from '@/pages/InventoryPage'
@@ -11,6 +12,7 @@ export default function App() {
       <Sidebar>
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/agent" element={<AgentPage />} />
           <Route path="/scout" element={<ScoutPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/crm" element={<CRMPage />} />

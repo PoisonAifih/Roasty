@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 
 const links = [
   { to: '/', label: 'Dashboard', end: true },
+  { to: '/agent', label: 'Sourcing Agent', end: false },
   { to: '/scout', label: 'Bean Scout', end: false },
   { to: '/inventory', label: 'Smart Inventory', end: false },
   { to: '/crm', label: 'Customer & Payment', end: false },

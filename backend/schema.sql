@@ -50,13 +50,6 @@ UPDATE coffee_shops SET payment_status = 'paid' WHERE lower(payment_status) IN (
 UPDATE coffee_shops SET payment_status = 'credit' WHERE lower(payment_status) IN ('kredit');
 UPDATE coffee_shops SET payment_status = 'overdue' WHERE lower(payment_status) IN ('telat', 'terlambat');
 
--- Synthetic contact numbers so the WhatsApp follow-up link has a target.
-UPDATE coffee_shops SET phone = '628123456701' WHERE id = '22222222-2222-2222-2222-222222222201' AND phone IS NULL;
-UPDATE coffee_shops SET phone = '628123456702' WHERE id = '22222222-2222-2222-2222-222222222202' AND phone IS NULL;
-UPDATE coffee_shops SET phone = '628123456703' WHERE id = '22222222-2222-2222-2222-222222222203' AND phone IS NULL;
-UPDATE coffee_shops SET phone = '628123456704' WHERE id = '22222222-2222-2222-2222-222222222204' AND phone IS NULL;
-UPDATE coffee_shops SET phone = '628123456705' WHERE id = '22222222-2222-2222-2222-222222222205' AND phone IS NULL;
-
 DO $$
 BEGIN
   IF (SELECT COUNT(*) FROM beans) = 0 THEN
@@ -135,3 +128,13 @@ BEGIN
       ('22222222-2222-2222-2222-222222222205', 6, CURRENT_DATE - 5);
   END IF;
 END $$;
+
+-- Synthetic contact numbers so the WhatsApp follow-up link has a target.
+-- Must run AFTER the seed block: on a fresh database the shops do not exist
+-- until the block above inserts them, so an earlier UPDATE would match
+-- nothing and only self-correct on the second boot.
+UPDATE coffee_shops SET phone = '628123456701' WHERE id = '22222222-2222-2222-2222-222222222201' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456702' WHERE id = '22222222-2222-2222-2222-222222222202' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456703' WHERE id = '22222222-2222-2222-2222-222222222203' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456704' WHERE id = '22222222-2222-2222-2222-222222222204' AND phone IS NULL;
+UPDATE coffee_shops SET phone = '628123456705' WHERE id = '22222222-2222-2222-2222-222222222205' AND phone IS NULL;
