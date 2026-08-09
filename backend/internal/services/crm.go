@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,10 +48,31 @@ func (s *CRMService) FollowUps(ctx context.Context) ([]models.CRMFollowUp, error
 		f.PredictedReorder = next.Format("2006-01-02")
 		f.NeedsFollowUp = f.DaysSinceOrder >= f.AvgIntervalDays-3
 		f.LatePayRisk = f.PaymentStatus == "overdue" || f.PaymentStatus == "credit"
-		f.Message = s.crmText(ctx, f)
 		out = append(out, f)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	s.fillCRMMessages(ctx, out)
+	return out, nil
+}
+
+// fillCRMMessages populates Message for every shop concurrently, capped at
+// aiConcurrency in-flight requests. Each goroutine owns one index.
+func (s *CRMService) fillCRMMessages(ctx context.Context, items []models.CRMFollowUp) {
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, aiConcurrency)
+	for i := range items {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			items[i].Message = s.crmText(ctx, items[i])
+		}(i)
+	}
+	wg.Wait()
 }
 
 func avgInterval(dates []time.Time) float64 {

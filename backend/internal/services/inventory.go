@@ -5,10 +5,15 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/poisonaifih/roasty/backend/internal/models"
 )
+
+// aiConcurrency bounds simultaneous OpenRouter calls. Row narratives are
+// independent, so they fan out instead of running one at a time.
+const aiConcurrency = 6
 
 type InventoryService struct {
 	pool *pgxpool.Pool
@@ -48,12 +53,13 @@ func (s *InventoryService) Suggestions(ctx context.Context) ([]models.InventoryS
 			sug.DaysOfCover = math.Round((sug.StockKg/sug.AvgDailyKg)*10) / 10
 		}
 		sug.Urgency = urgency(sug.DaysOfCover, sug.TrendBoost)
-		sug.Suggestion = s.restockText(ctx, sug)
 		out = append(out, sug)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	s.fillRestockTexts(ctx, out)
 
 	rank := map[string]int{"high": 0, "med": 1, "low": 2}
 	for i := 0; i < len(out); i++ {
@@ -81,6 +87,24 @@ func urgency(days float64, trend int) string {
 		return "med"
 	}
 	return "low"
+}
+
+// fillRestockTexts populates Suggestion for every item concurrently, capped at
+// aiConcurrency in-flight requests. Each goroutine writes to its own index, so
+// no further synchronisation is needed.
+func (s *InventoryService) fillRestockTexts(ctx context.Context, items []models.InventorySuggestion) {
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, aiConcurrency)
+	for i := range items {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			items[i].Suggestion = s.restockText(ctx, items[i])
+		}(i)
+	}
+	wg.Wait()
 }
 
 func (s *InventoryService) restockText(ctx context.Context, sug models.InventorySuggestion) string {

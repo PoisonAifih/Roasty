@@ -208,24 +208,9 @@ func (c *shopSearchClient) searchDDG(ctx context.Context, endpoint, query string
 
 	body, err := c.doRead(req)
 	if err != nil || body == "" {
-		req2, err2 := build()
-		if err2 != nil {
-			return nil
-		}
-		req2.Header = req.Header.Clone()
-		res, err2 := newInsecureClient().Do(req2)
-		if err2 != nil {
-			return nil
-		}
-		defer res.Body.Close()
-		if res.StatusCode >= 300 {
-			return nil
-		}
-		raw, err2 := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-		if err2 != nil {
-			return nil
-		}
-		body = string(raw)
+		// searchAll already falls back to the lite endpoint, so a failure here
+		// simply means this source returned no hits.
+		return nil
 	}
 
 	return parseDDGBody(body, limit)
@@ -245,12 +230,6 @@ func (c *shopSearchClient) doRead(req *http.Request) (string, error) {
 		return "", err
 	}
 	return string(raw), nil
-}
-
-func newInsecureClient() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}
-	return &http.Client{Timeout: 10 * time.Second, Transport: transport}
 }
 
 func parseDDGBody(body string, limit int) []searchHit {

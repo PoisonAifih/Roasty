@@ -60,7 +60,7 @@ export type CRMFollowUp = {
   message: string
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8014'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
