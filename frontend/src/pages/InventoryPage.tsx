@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
-import { api, type InventorySuggestion } from '@/api/client'
+import { useEffect, useState, type FormEvent } from 'react'
+import { api, type InventorySuggestion, type StockAdjustment } from '@/api/client'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
@@ -108,7 +110,8 @@ export function InventoryPage() {
                       <span className="min-w-0 flex-1">
                         <strong className="font-heading block font-semibold">{i.origin}</strong>
                         <small className="block text-sm text-muted-foreground">
-                          {i.stock_kg}kg · {i.days_of_cover} days cover
+                          {i.stock_kg} kg ·{' '}
+                          {i.days_of_cover >= 999 ? 'no sales data' : `${i.days_of_cover}d cover`}
                         </small>
                       </span>
                       <Badge
@@ -129,44 +132,230 @@ export function InventoryPage() {
             </CardContent>
           </Card>
 
-          {selected && (
-            <Card className="rounded-none shadow-none">
-              <CardContent className="pt-6">
-                <h2 className="font-heading m-0 text-[1.45rem] font-semibold">{selected.origin}</h2>
-                <p className="mt-1 text-muted-foreground">{selected.variety}</p>
-                <div className="my-4 grid grid-cols-2 border border-border">
-                  {[
-                    ['Stock', `${selected.stock_kg} kg`],
-                    ['Days of cover', String(selected.days_of_cover)],
-                    ['Daily average', `${selected.avg_daily_kg.toFixed(2)} kg`],
-                    ['Trend', String(selected.trend_boost)],
-                  ].map(([label, value], idx) => (
-                    <div
-                      key={label}
-                      className={cn(
-                        'p-3',
-                        idx % 2 === 0 && 'border-r border-border',
-                        idx < 2 && 'border-b border-border',
-                      )}
-                    >
-                      <span className="block text-xs uppercase tracking-wider text-muted-foreground">
-                        {label}
-                      </span>
-                      <strong className="font-heading text-[1.05rem] font-semibold">{value}</strong>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-1.5 border-t border-border pt-4">
-                  <h3 className="font-heading mb-1.5 text-[1.05rem] font-bold text-destructive">
-                    Restock suggestion
-                  </h3>
-                  <p className="m-0">{selected.suggestion}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {selected && <DetailPanel key={selected.bean_id} item={selected} onMutate={load} />}
         </div>
       )}
     </section>
+  )
+}
+
+function DetailPanel({
+  item,
+  onMutate,
+}: {
+  item: InventorySuggestion
+  onMutate: () => Promise<void>
+}) {
+  // Adjust stock form
+  const [adjStock, setAdjStock] = useState(String(item.stock_kg))
+  const [adjBusy, setAdjBusy] = useState(false)
+  const [adjMsg, setAdjMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // Record sale form
+  const [saleQty, setSaleQty] = useState('')
+  const [saleDate, setSaleDate] = useState('')
+  const [saleBusy, setSaleBusy] = useState(false)
+  const [saleMsg, setSaleMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // Adjustment history
+  const [adjustments, setAdjustments] = useState<StockAdjustment[]>([])
+
+  useEffect(() => {
+    api
+      .beanAdjustments(item.bean_id)
+      .then(setAdjustments)
+      .catch(() => {})
+  }, [item.bean_id])
+
+  async function onAdjust(e: FormEvent) {
+    e.preventDefault()
+    const kg = parseFloat(adjStock)
+    if (isNaN(kg) || kg < 0) {
+      setAdjMsg({ ok: false, text: 'Enter a valid non-negative number.' })
+      return
+    }
+    setAdjBusy(true)
+    setAdjMsg(null)
+    try {
+      await api.adjustStock(item.bean_id, kg)
+      setAdjMsg({ ok: true, text: `Stock set to ${kg} kg.` })
+      await onMutate()
+    } catch (err) {
+      setAdjMsg({ ok: false, text: err instanceof Error ? err.message : 'Failed to adjust stock.' })
+    } finally {
+      setAdjBusy(false)
+    }
+  }
+
+  async function onSale(e: FormEvent) {
+    e.preventDefault()
+    const qty = parseFloat(saleQty)
+    if (isNaN(qty) || qty <= 0) {
+      setSaleMsg({ ok: false, text: 'Enter a valid quantity greater than zero.' })
+      return
+    }
+    setSaleBusy(true)
+    setSaleMsg(null)
+    try {
+      await api.recordSale({ bean_id: item.bean_id, qty_kg: qty, sold_at: saleDate || undefined })
+      setSaleMsg({ ok: true, text: `Recorded sale of ${qty} kg.` })
+      setSaleQty('')
+      setSaleDate('')
+      await onMutate()
+    } catch (err) {
+      setSaleMsg({ ok: false, text: err instanceof Error ? err.message : 'Failed to record sale.' })
+    } finally {
+      setSaleBusy(false)
+    }
+  }
+
+  return (
+    <Card className="rounded-none shadow-none">
+      <CardContent className="pt-6">
+        <h2 className="font-heading m-0 text-[1.45rem] font-semibold">{item.origin}</h2>
+        <p className="mt-1 text-muted-foreground">{item.variety}</p>
+
+        <div className="my-4 grid grid-cols-2 border border-border">
+          {(
+            [
+              ['Stock', `${item.stock_kg} kg`],
+              [
+                'Days of cover',
+                item.days_of_cover >= 999 ? 'No sales data' : String(item.days_of_cover),
+              ],
+              ['Daily average', `${item.avg_daily_kg.toFixed(2)} kg`],
+              ['Trend signal', item.trend_boost > 0 ? `+${item.trend_boost}` : '—'],
+            ] as const
+          ).map(([label, value], idx) => (
+            <div
+              key={label}
+              className={cn(
+                'p-3',
+                idx % 2 === 0 && 'border-r border-border',
+                idx < 2 && 'border-b border-border',
+              )}
+            >
+              <span className="block text-xs uppercase tracking-wider text-muted-foreground">
+                {label}
+              </span>
+              <strong className="font-heading text-[1.05rem] font-semibold">{value}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <h3 className="font-heading mb-1.5 text-[1.05rem] font-bold text-destructive">
+            Restock suggestion
+          </h3>
+          <p className="m-0 text-sm">{item.suggestion}</p>
+        </div>
+
+        {/* ── Adjust stock ───────────────────────────────────────────── */}
+        <form onSubmit={(e) => void onAdjust(e)} className="mt-5 border-t border-border pt-4">
+          <h3 className="font-heading mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Adjust stock (restock / opname)
+          </h3>
+          <div className="flex items-end gap-2">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor={`adj-${item.bean_id}`}>New total stock (kg)</Label>
+              <Input
+                id={`adj-${item.bean_id}`}
+                type="number"
+                min={0}
+                step={0.1}
+                value={adjStock}
+                onChange={(e) => setAdjStock(e.target.value)}
+                className="rounded-none"
+              />
+            </div>
+            <Button type="submit" disabled={adjBusy} className="rounded-none">
+              {adjBusy ? 'Saving…' : 'Set stock'}
+            </Button>
+          </div>
+          {adjMsg && (
+            <p
+              className={cn(
+                'mt-2 text-sm',
+                adjMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive',
+              )}
+            >
+              {adjMsg.text}
+            </p>
+          )}
+        </form>
+
+        {/* ── Record sale ────────────────────────────────────────────── */}
+        <form onSubmit={(e) => void onSale(e)} className="mt-5 border-t border-border pt-4">
+          <h3 className="font-heading mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Record sale
+          </h3>
+          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`sale-qty-${item.bean_id}`}>Qty (kg)</Label>
+              <Input
+                id={`sale-qty-${item.bean_id}`}
+                type="number"
+                min={0.1}
+                step={0.1}
+                placeholder="e.g. 5"
+                value={saleQty}
+                onChange={(e) => setSaleQty(e.target.value)}
+                className="rounded-none"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`sale-date-${item.bean_id}`}>Date (optional)</Label>
+              <Input
+                id={`sale-date-${item.bean_id}`}
+                type="date"
+                value={saleDate}
+                onChange={(e) => setSaleDate(e.target.value)}
+                className="rounded-none"
+              />
+            </div>
+            <Button type="submit" disabled={saleBusy} className="rounded-none">
+              {saleBusy ? 'Saving…' : 'Record'}
+            </Button>
+          </div>
+          {saleMsg && (
+            <p
+              className={cn(
+                'mt-2 text-sm',
+                saleMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive',
+              )}
+            >
+              {saleMsg.text}
+            </p>
+          )}
+        </form>
+
+        {/* ── Adjustment history ─────────────────────────────────────── */}
+        <div className="mt-5 border-t border-border pt-4">
+          <h3 className="font-heading mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Adjustment history
+          </h3>
+          {adjustments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No adjustments yet.</p>
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {adjustments.slice(0, 5).map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-baseline gap-3 border-t border-border py-2 text-sm first:border-t-0"
+                >
+                  <span className="w-[6.5rem] shrink-0 text-xs text-muted-foreground">
+                    {new Date(a.adjusted_at).toLocaleDateString()}
+                  </span>
+                  <span className="font-mono">
+                    {a.old_stock} → {a.new_stock} kg
+                  </span>
+                  {a.note && <span className="text-muted-foreground">{a.note}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

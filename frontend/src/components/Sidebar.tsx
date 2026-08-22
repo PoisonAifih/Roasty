@@ -1,18 +1,41 @@
 import { NavLink } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { api } from '@/api/client'
 
 const links = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/agent', label: 'Sourcing Agent', end: false },
   { to: '/scout', label: 'Bean Scout', end: false },
   { to: '/inventory', label: 'Smart Inventory', end: false },
+  { to: '/beans', label: 'Bean Management', end: false },
   { to: '/crm', label: 'Customer & Payment', end: false },
+  { to: '/notifications', label: 'Notifications', end: false },
 ]
 
 export function Sidebar({ children }: { children: ReactNode }) {
+  const [unread, setUnread] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    async function poll() {
+      try {
+        const data = await api.notifications()
+        if (!cancelled) setUnread(data.unread)
+      } catch {
+        // non-fatal
+      }
+    }
+    void poll()
+    const id = setInterval(() => void poll(), 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
+
   return (
     <div className="grid min-h-screen grid-cols-1 md:grid-cols-[250px_1fr]">
       <aside className="flex flex-col gap-7 border-b border-sidebar-border bg-sidebar p-5 text-sidebar-foreground md:border-b-0 md:border-r">
@@ -43,7 +66,14 @@ export function Sidebar({ children }: { children: ReactNode }) {
                       : 'border-b-2 border-transparent md:border-b-0 md:border-l-2',
                   )}
                 >
-                  {l.label}
+                  <span className="flex w-full items-center justify-between">
+                    {l.label}
+                    {l.to === '/notifications' && unread > 0 && (
+                      <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[0.7rem] font-bold text-white">
+                        {unread}
+                      </span>
+                    )}
+                  </span>
                 </Button>
               )}
             </NavLink>

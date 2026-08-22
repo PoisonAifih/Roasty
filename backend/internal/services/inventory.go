@@ -45,6 +45,7 @@ func (s *InventoryService) snapshot(ctx context.Context) ([]models.InventorySugg
 		FROM beans b
 		LEFT JOIN sales s ON s.bean_id = b.id AND s.sold_at >= CURRENT_DATE - 28
 		LEFT JOIN trend_signals t ON t.origin = b.origin
+		WHERE b.active = true
 		GROUP BY b.id, b.origin, b.variety, b.stock_kg
 		ORDER BY b.origin`)
 	if err != nil {
@@ -116,6 +117,151 @@ func (s *InventoryService) fillRestockTexts(ctx context.Context, items []models.
 		}(i)
 	}
 	wg.Wait()
+}
+
+// ListAllBeans returns all beans including inactive, for the management page.
+func (s *InventoryService) ListAllBeans(ctx context.Context) ([]models.Bean, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, origin, variety, channel, price_per_kg, stock_kg,
+		       harvest_estimate_kg, humidity, quality_score, sell_price_per_kg, active
+		FROM beans ORDER BY active DESC, origin`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var beans []models.Bean
+	for rows.Next() {
+		var b models.Bean
+		if err := rows.Scan(&b.ID, &b.Origin, &b.Variety, &b.Channel, &b.PricePerKg, &b.StockKg,
+			&b.HarvestEstimateKg, &b.Humidity, &b.QualityScore, &b.SellPricePerKg, &b.Active); err != nil {
+			return nil, err
+		}
+		b.Channel = normalizeChannel(b.Channel)
+		beans = append(beans, b)
+	}
+	return beans, rows.Err()
+}
+
+// RecentAdjustments returns the last N stock adjustments for a bean.
+func (s *InventoryService) RecentAdjustments(ctx context.Context, beanID string, limit int) ([]models.StockAdjustment, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, bean_id::text, old_stock, new_stock, COALESCE(note, ''), adjusted_at
+		FROM stock_adjustments
+		WHERE bean_id = $1::uuid
+		ORDER BY adjusted_at DESC
+		LIMIT $2`, beanID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.StockAdjustment
+	for rows.Next() {
+		var a models.StockAdjustment
+		if err := rows.Scan(&a.ID, &a.BeanID, &a.OldStock, &a.NewStock, &a.Note, &a.AdjustedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+type CreateBeanInput struct {
+	Origin            string  `json:"origin"`
+	Variety           string  `json:"variety"`
+	Channel           string  `json:"channel"`
+	PricePerKg        float64 `json:"price_per_kg"`
+	SellPricePerKg    float64 `json:"sell_price_per_kg"`
+	StockKg           float64 `json:"stock_kg"`
+	HarvestEstimateKg float64 `json:"harvest_estimate_kg"`
+	Humidity          float64 `json:"humidity"`
+	QualityScore      float64 `json:"quality_score"`
+}
+
+func (s *InventoryService) CreateBean(ctx context.Context, in CreateBeanInput) (*models.Bean, error) {
+	if strings.TrimSpace(in.Origin) == "" {
+		return nil, fmt.Errorf("origin required")
+	}
+	if strings.TrimSpace(in.Variety) == "" {
+		return nil, fmt.Errorf("variety required")
+	}
+	if in.PricePerKg <= 0 {
+		return nil, fmt.Errorf("price_per_kg must be > 0")
+	}
+	if in.SellPricePerKg <= 0 {
+		return nil, fmt.Errorf("sell_price_per_kg must be > 0")
+	}
+	channel := normalizeChannel(in.Channel)
+	var b models.Bean
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO beans (origin, variety, channel, price_per_kg, sell_price_per_kg, stock_kg,
+		                   harvest_estimate_kg, humidity, quality_score)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id::text, origin, variety, channel, price_per_kg, stock_kg,
+		          harvest_estimate_kg, humidity, quality_score, sell_price_per_kg, active`,
+		in.Origin, in.Variety, channel, in.PricePerKg, in.SellPricePerKg, in.StockKg,
+		in.HarvestEstimateKg, in.Humidity, in.QualityScore,
+	).Scan(&b.ID, &b.Origin, &b.Variety, &b.Channel, &b.PricePerKg, &b.StockKg,
+		&b.HarvestEstimateKg, &b.Humidity, &b.QualityScore, &b.SellPricePerKg, &b.Active)
+	if err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
+
+type UpdateBeanInput struct {
+	Origin            string  `json:"origin"`
+	Variety           string  `json:"variety"`
+	Channel           string  `json:"channel"`
+	PricePerKg        float64 `json:"price_per_kg"`
+	SellPricePerKg    float64 `json:"sell_price_per_kg"`
+	HarvestEstimateKg float64 `json:"harvest_estimate_kg"`
+	Humidity          float64 `json:"humidity"`
+	QualityScore      float64 `json:"quality_score"`
+}
+
+func (s *InventoryService) UpdateBean(ctx context.Context, beanID string, in UpdateBeanInput) error {
+	if beanID == "" {
+		return fmt.Errorf("bean id required")
+	}
+	if strings.TrimSpace(in.Origin) == "" {
+		return fmt.Errorf("origin required")
+	}
+	if in.PricePerKg <= 0 {
+		return fmt.Errorf("price_per_kg must be > 0")
+	}
+	if in.SellPricePerKg <= 0 {
+		return fmt.Errorf("sell_price_per_kg must be > 0")
+	}
+	channel := normalizeChannel(in.Channel)
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE beans
+		SET origin=$1, variety=$2, channel=$3, price_per_kg=$4, sell_price_per_kg=$5,
+		    harvest_estimate_kg=$6, humidity=$7, quality_score=$8
+		WHERE id=$9`,
+		in.Origin, in.Variety, channel, in.PricePerKg, in.SellPricePerKg,
+		in.HarvestEstimateKg, in.Humidity, in.QualityScore, beanID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("bean %s not found", beanID)
+	}
+	return nil
+}
+
+// SetBeanActive enables or disables a bean (soft delete / restore).
+func (s *InventoryService) SetBeanActive(ctx context.Context, beanID string, active bool) error {
+	if beanID == "" {
+		return fmt.Errorf("bean id required")
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE beans SET active=$1 WHERE id=$2`, active, beanID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("bean %s not found", beanID)
+	}
+	return nil
 }
 
 func (s *InventoryService) restockText(ctx context.Context, sug models.InventorySuggestion) string {

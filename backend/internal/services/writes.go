@@ -72,10 +72,11 @@ func (s *InventoryService) RecordSale(ctx context.Context, in RecordSaleInput) e
 
 type AdjustStockInput struct {
 	StockKg float64 `json:"stock_kg"`
+	Note    string  `json:"note"`
 }
 
-// AdjustStock sets an absolute stock level, for restock deliveries and
-// stocktake corrections.
+// AdjustStock sets an absolute stock level and writes an audit row in the same
+// transaction, so the log can never drift from the actual stock value.
 func (s *InventoryService) AdjustStock(ctx context.Context, beanID string, in AdjustStockInput) error {
 	if beanID == "" {
 		return fmt.Errorf("bean id required")
@@ -83,15 +84,32 @@ func (s *InventoryService) AdjustStock(ctx context.Context, beanID string, in Ad
 	if in.StockKg < 0 {
 		return fmt.Errorf("stock_kg cannot be negative")
 	}
-	tag, err := s.pool.Exec(ctx,
-		`UPDATE beans SET stock_kg = $1 WHERE id = $2`, in.StockKg, beanID)
+
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var oldStock float64
+	err = tx.QueryRow(ctx, `SELECT stock_kg FROM beans WHERE id = $1 FOR UPDATE`, beanID).Scan(&oldStock)
+	if err == pgx.ErrNoRows {
 		return fmt.Errorf("bean %s not found", beanID)
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO stock_adjustments (bean_id, old_stock, new_stock, note) VALUES ($1, $2, $3, NULLIF($4, ''))`,
+		beanID, oldStock, in.StockKg, in.Note); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE beans SET stock_kg = $1 WHERE id = $2`, in.StockKg, beanID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // MarkContacted stamps today's date so follow-up suggestions stop repeating

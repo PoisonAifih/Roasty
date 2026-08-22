@@ -28,22 +28,31 @@ type Agent struct {
 	scout *ScoutService
 	inv   *InventoryService
 	crm   *CRMService
+	rag   *RAGService
 }
 
-func NewAgent(pool *pgxpool.Pool, ai *AIClient, scout *ScoutService, inv *InventoryService, crm *CRMService) *Agent {
-	return &Agent{pool: pool, ai: ai, scout: scout, inv: inv, crm: crm}
+func NewAgent(pool *pgxpool.Pool, ai *AIClient, scout *ScoutService, inv *InventoryService, crm *CRMService, rag *RAGService) *Agent {
+	return &Agent{pool: pool, ai: ai, scout: scout, inv: inv, crm: crm, rag: rag}
 }
 
 const agentSystemPrompt = `You are a sourcing advisor for an Indonesian coffee roastery.
 
-You have tools that read the roastery's own database and search the live web.
-Use them before answering - never invent prices, stock levels or origins.
+You have tools that read the roastery's own database, search the live web,
+and query two knowledge stores:
+- query_knowledge_base: SNI quality standards, grading, origin profiles, market context.
+- find_similar_beans: semantic search over a bean sourcing catalog with supplier
+  contacts. Use this whenever the user asks for a bean recommendation by taste,
+  use-case, or similarity to another origin. It returns supplier names, phone
+  numbers, locations, and minimum order quantities.
 
-Work in this order:
-1. Understand what the user is optimising for (budget, volume, quality, risk).
-2. Call tools to gather the facts you actually need. Do not call a tool twice
-   with the same arguments.
-3. Give a concrete recommendation with quantities in kg and rupiah totals.
+Use tools before answering — never invent prices, stock levels, or supplier contacts.
+
+Workflow for sourcing questions:
+1. Call find_similar_beans with a description of the desired profile or use-case.
+2. Cross-check results against list_beans / score_beans for current stock and price.
+3. If the user gives a budget, call build_basket for an allocation plan.
+4. Give a concrete answer: which beans to buy, from which supplier, quantity in kg,
+   total cost in rupiah, and direct contact info.
 
 Prices are Indonesian rupiah per kilogram. Always reply in English.
 Be specific and short. No markdown headings, no bullet symbols.`
@@ -106,6 +115,20 @@ func agentTools() []ToolDef {
 				"origin":  str,
 				"variety": str,
 			}, "origin"),
+		}},
+		{Type: "function", Function: FunctionDef{
+			Name:        "find_similar_beans",
+			Description: "Semantic search over the bean sourcing catalog. Given a natural-language description of the desired bean (flavor profile, aroma, use-case, budget tier, processing method, or similarity to another origin), returns the closest matches with full supplier contact details: name, type (koperasi/pedagang/online), WhatsApp/phone, location, minimum order, and notes. Always use this when the user asks which bean to buy or where to source a specific type of bean.",
+			Parameters: obj(map[string]any{
+				"query": str,
+			}, "query"),
+		}},
+		{Type: "function", Function: FunctionDef{
+			Name:        "query_knowledge_base",
+			Description: "Search the knowledge base of Indonesian coffee quality standards (SNI), origin profiles, grading systems (SNI vs SCA), processing methods, market context, and CRM patterns. Use for any question about quality grades, defect values, moisture limits, origin characteristics, harvest seasons, pricing context, or best practices.",
+			Parameters: obj(map[string]any{
+				"question": str,
+			}, "question"),
 		}},
 	}
 }
@@ -269,6 +292,34 @@ func (ag *Agent) execute(ctx context.Context, name, rawArgs string) (string, err
 			return "", err
 		}
 		return toJSON(shops)
+
+	case "find_similar_beans":
+		query := argStr("query")
+		if query == "" {
+			return "", fmt.Errorf("query required")
+		}
+		if ag.rag == nil {
+			return "Bean catalog not available.", nil
+		}
+		result, err := ag.rag.FindSimilarBeans(ctx, query, 4)
+		if err != nil {
+			return fmt.Sprintf("error searching bean catalog: %v", err), nil
+		}
+		return result, nil
+
+	case "query_knowledge_base":
+		question := argStr("question")
+		if question == "" {
+			return "", fmt.Errorf("question required")
+		}
+		if ag.rag == nil {
+			return "Knowledge base not available.", nil
+		}
+		context := ag.rag.QueryText(ctx, question)
+		if context == "" {
+			return "No relevant information found in knowledge base.", nil
+		}
+		return context, nil
 	}
 
 	return "", fmt.Errorf("unknown tool %q", name)

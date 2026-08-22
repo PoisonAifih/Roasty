@@ -117,7 +117,7 @@ export function ScoutPage() {
           Bean Scout
         </h1>
         <p className="mt-2 max-w-xl text-[1.02rem] text-muted-foreground">
-          Filter by budget and/or weigh.
+          Filter by budget and/or weight.
         </p>
       </header>
 

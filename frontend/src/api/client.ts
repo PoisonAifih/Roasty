@@ -9,6 +9,16 @@ export type Bean = {
   humidity: number
   quality_score: number
   sell_price_per_kg: number
+  active?: boolean
+}
+
+export type StockAdjustment = {
+  id: string
+  bean_id: string
+  old_stock: number
+  new_stock: number
+  note: string
+  adjusted_at: string
 }
 
 export type ScoutRecommendation = {
@@ -101,6 +111,21 @@ export type TraceEvent = {
   step?: number
 }
 
+export type Notification = {
+  id: string
+  kind: 'low_stock' | 'payment_overdue' | 'reorder_due' | string
+  title: string
+  body: string
+  severity: 'high' | 'med' | 'low' | string
+  read: boolean
+  created_at: string
+}
+
+export type NotificationsResponse = {
+  unread: number
+  notifications: Notification[]
+}
+
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8014'
 
 /** Opens the agent SSE stream. Returns a closer so callers can abort. */
@@ -186,4 +211,25 @@ export const api = {
     request<{ status: string }>(`/api/shops/${encodeURIComponent(shopId)}/contacted`, {
       method: 'POST',
     }),
+  notifications: () => request<NotificationsResponse>('/api/notifications'),
+  markRead: (id: string) =>
+    request<{ status: string }>(`/api/notifications/${encodeURIComponent(id)}/read`, {
+      method: 'POST',
+    }),
+  markAllRead: () =>
+    request<{ status: string }>('/api/notifications/read-all', { method: 'POST' }),
+  allBeans: () => request<Bean[]>('/api/beans/all'),
+  createBean: (body: Omit<Bean, 'id' | 'active'>) =>
+    request<Bean>('/api/beans', { method: 'POST', body: JSON.stringify(body) }),
+  updateBean: (id: string, body: Omit<Bean, 'id' | 'active' | 'stock_kg'>) =>
+    request<{ status: string }>(`/api/beans/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  disableBean: (id: string) =>
+    request<{ status: string }>(`/api/beans/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  restoreBean: (id: string) =>
+    request<{ status: string }>(`/api/beans/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
+  beanAdjustments: (id: string) =>
+    request<StockAdjustment[]>(`/api/beans/${encodeURIComponent(id)}/adjustments`),
 }

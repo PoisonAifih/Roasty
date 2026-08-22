@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type Bean struct {
 	ID                string  `json:"id"`
 	Origin            string  `json:"origin"`
@@ -11,6 +13,16 @@ type Bean struct {
 	Humidity          float64 `json:"humidity"`
 	QualityScore      float64 `json:"quality_score"`
 	SellPricePerKg    float64 `json:"sell_price_per_kg"`
+	Active            bool    `json:"active"`
+}
+
+type StockAdjustment struct {
+	ID         string    `json:"id"`
+	BeanID     string    `json:"bean_id"`
+	OldStock   float64   `json:"old_stock"`
+	NewStock   float64   `json:"new_stock"`
+	Note       string    `json:"note"`
+	AdjustedAt time.Time `json:"adjusted_at"`
 }
 
 type ScoreBreakdown struct {

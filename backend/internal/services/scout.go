@@ -36,8 +36,8 @@ type RecommendInput struct {
 func (s *ScoutService) ListBeans(ctx context.Context) ([]models.Bean, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id::text, origin, variety, channel, price_per_kg, stock_kg,
-		       harvest_estimate_kg, humidity, quality_score, sell_price_per_kg
-		FROM beans ORDER BY origin`)
+		       harvest_estimate_kg, humidity, quality_score, sell_price_per_kg, active
+		FROM beans WHERE active = true ORDER BY origin`)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (s *ScoutService) ListBeans(ctx context.Context) ([]models.Bean, error) {
 	for rows.Next() {
 		var b models.Bean
 		if err := rows.Scan(&b.ID, &b.Origin, &b.Variety, &b.Channel, &b.PricePerKg, &b.StockKg,
-			&b.HarvestEstimateKg, &b.Humidity, &b.QualityScore, &b.SellPricePerKg); err != nil {
+			&b.HarvestEstimateKg, &b.Humidity, &b.QualityScore, &b.SellPricePerKg, &b.Active); err != nil {
 			return nil, err
 		}
 		b.Channel = normalizeChannel(b.Channel)

@@ -23,6 +23,8 @@ const toolLabels: Record<string, string> = {
   sales_history: 'Pulling sales history',
   build_basket: 'Allocating budget across origins',
   market_price: 'Searching live market listings',
+  find_similar_beans: 'Searching bean sourcing catalog',
+  query_knowledge_base: 'Looking up coffee standards & context',
 }
 
 export function AgentPage() {
